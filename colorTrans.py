@@ -9,7 +9,7 @@ path_t = 'img/temp.png'
 def arrayFromImg(_path = path_r):
     _img = Image.open(_path)
     _px = _img.load()
-    _colorArray = np.ndarray(shape=(_img.width, _img.height, 3), dtype=np.float, order='C')
+    _colorArray = np.ndarray(shape=(_img.width, _img.height, 3), dtype=np.clongdouble, order='C')
     for y in range(_img.height):
         for x in range(_img.width):
             _colorArray[x, y] = _px[x, y]
@@ -20,20 +20,11 @@ def imgFromArray(_colorArray,_path = path_t):
     _px = _img.load()
     for y in range(_img.height):
         for x in range(_img.width):
-            _px[x, y] = tuple(_colorArray[x,y])
+            _px[x, y] = (int(_colorArray[x,y][0]),int(_colorArray[x,y][1]),int(_colorArray[x,y][2]))
 
     _img.save(_path)
 
-def convert_int_float(_i):
-    _f=(_i[0]/255,_i[1]/255,_i[2]/255)
-    return (_f)
 
-s_img_array = arrayFromImg(path_s)
-r_img_array = arrayFromImg(path_r)
-
-for y in range(s_img_array.shape[1]):
-    for x in range(s_img_array.shape[0]):
-        _rgb = np.array(convert_int_float(s_img_array[x, y]))
 
 
 
@@ -92,4 +83,105 @@ def convert_lab_rgb(_lab):
     _rgb = m_lms_rgb@_lms
     return(_rgb)
 
-arrayFromImg()
+def convert_img_rgb_lab (_array):
+    # convert rgb int -> lab float
+    for y in range(_array.shape[1]):
+        for x in range(_array.shape[0]):
+            # int to float , rgb to lab
+            _array[x, y] = convert_rgb_lab (_array[x, y]/255)
+    return(_array)
+
+def convert_img_lab_rgb (_array):
+    # convert rgb int -> lab float
+    for y in range(_array.shape[1]):
+        for x in range(_array.shape[0]):
+            # int to float , rgb to lab
+            _array[x, y] = convert_lab_rgb (_array[x, y])
+    return(_array)
+
+def convert_img_rgb_float_int (_array):
+    # convert rgb float -> int
+    _iArray = np.ndarray(shape=_array.shape, dtype=np.int, order='C')
+    for y in range(_array.shape[1]):
+        for x in range(_array.shape[0]):
+
+            _array[x, y][0] = np.clip(_array[x, y][0], 0, 1)
+            _array[x, y][1] = np.clip(_array[x, y][1], 0, 1)
+            _array[x, y][2] = np.clip(_array[x, y][2], 0, 1)
+            _iArray[x,y] = 255 * _array[x, y]
+    return(_iArray)
+
+class Img_info():
+    def __init__(self,_mean,_sd,_dArray):
+        self.mean = _mean
+        self.sd = _sd
+        self.dArray = _dArray
+
+
+
+def gat_mean_sd (_array):
+    w = _array.shape[0]
+    h = _array.shape[1]
+    _mean = (0,0,0)
+
+    for y in range(h):
+        for x in range(w):
+            # <x>
+            _mean += _array[x, y]
+    _mean = _mean/w/h
+
+    _sd = (0,0,0)
+    _dArray = np.ndarray(shape=_array.shape, dtype= np.clongdouble, order='C')
+    for y in range(h):
+        for x in range(w):
+            # x*
+            _dArray[x,y] = abs(_array[x, y] - _mean)
+            # sigma
+            _sd +=_dArray[x,y]
+    _sd = _sd/w/h
+
+    return(Img_info(_mean , _sd , _dArray))
+
+
+
+s_img_array = arrayFromImg(path_s)
+r_img_array = arrayFromImg(path_r)
+
+# data convert
+s_img_array = convert_img_rgb_lab(s_img_array)
+r_img_array = convert_img_rgb_lab(r_img_array)
+
+# get info
+s_img_info = gat_mean_sd (s_img_array)
+r_img_info = gat_mean_sd (r_img_array)
+
+# data
+
+# print(r_img_info.sd)
+# print(r_img_info.mean)
+# print(r_img_info.dArray)
+
+# print(s_img_info.sd)
+# print(s_img_info.mean)
+# print(s_img_info.dArray)
+
+## s_img_info.dArray +=s_img_info.mean
+## tArray = convert_img_lab_rgb(s_img_info.dArray)
+## imgFromArray(tArray)
+
+# make new data
+
+w = s_img_info.dArray.shape[0]
+h = s_img_info.dArray.shape[1]
+_tArray = np.ndarray(shape=s_img_info.dArray.shape, dtype=np.clongdouble, order='C')
+
+_td = r_img_info.sd/s_img_info.sd * s_img_info.dArray
+_tArray = r_img_info.mean + _td
+
+# first convert lab to rgb, then standarlize the value and clamp
+# img will be wired when 2 images are too different
+_resultArray = convert_img_rgb_float_int(convert_img_lab_rgb(_tArray))
+imgFromArray(_resultArray)
+print (_resultArray)
+
+# convert rgb
