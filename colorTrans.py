@@ -1,21 +1,22 @@
 from PIL import Image ,ImageFont,ImageDraw
 import numpy as np
+import math
 
 # path
-path_r = 'img/sky_s0.png'
-path_s = 'img/sky_s1.png'
-path_t = 'img/temp.png'
+path_tgt = 'img/style.png'
+path_src = 'img/texture.png'
+path_tsf = 'img/trasfer.png'
 
-def arrayFromImg(_path = path_r):
+def arrayFromImg(_path = path_tgt):
     _img = Image.open(_path)
     _px = _img.load()
-    _colorArray = np.ndarray(shape=(_img.width, _img.height, 3), dtype=np.clongdouble, order='C')
+    _colorArray = np.ndarray(shape=(_img.width, _img.height, 3), dtype=np.float32, order='C')
     for y in range(_img.height):
         for x in range(_img.width):
             _colorArray[x, y] = _px[x, y]
     return _colorArray
 
-def imgFromArray(_colorArray,_path = path_t):
+def imgFromArray(_colorArray, _path = path_tsf):
     _img = Image.new("RGB", (_colorArray.shape[0],_colorArray.shape[1]), (0,0,0))
     _px = _img.load()
     for y in range(_img.height):
@@ -67,9 +68,24 @@ m_lab_lms = m_lab_lms_0 @ m_lab_lms_1
 def convert_rgb_lab (_rgb):
     _lms = m_rgb_lms@_rgb
     # log 10
-    _lms[0] = np.log10(_lms[0])
-    _lms[1] = np.log10(_lms[1])
-    _lms[2] = np.log10(_lms[2])
+
+    for i in range(3):
+
+        if np.isnan(np.log10(_lms[i])) or np.isinf(np.log10(_lms[i])):
+            _lms[i] = 0
+        else:
+            _lms[i] = np.log10(_lms[i])
+
+    # _lms[0] = np.log10(_lms[0])
+    # _lms[1] = np.log10(_lms[1])
+    # _lms[2] = np.log10(_lms[2])
+    # if np.isinf(_lms[0]) :
+    #     _lms[0] = 0
+    # if np.isinf(_lms[1]) :
+    #     _lms[1] = 0
+    # if np.isinf(_lms[2]) :
+    #     _lms[2] = 0
+
     _lab = m_lms_lab@_lms
     return (_lab)
 
@@ -143,7 +159,7 @@ def gat_mean_sd (_array):
     return(Img_info(_mean , _sd , _dArray))
 
 
-
+''' old method
 s_img_array = arrayFromImg(path_s)
 r_img_array = arrayFromImg(path_r)
 
@@ -185,3 +201,166 @@ imgFromArray(_resultArray)
 print (_resultArray)
 
 # convert rgb
+
+'''
+
+import cv2
+
+def LinearToGammaSRGB(  x ) :
+
+    if x <= 0.0031308 :
+        return 12.92 * x;
+    else :
+        return 1.055 * math.pow( x, 1.0 / 2.4 ) - 0.055;
+
+
+def GammaSRGBToLinear( x ) :
+    if x <= 0.04045 :
+        return x / 12.92;
+
+    else:
+        return math.pow( (x + 0.055) / 1.055, 2.4 )
+
+def image_stats (src):
+    l, a, b = cv2.split(src)
+    (lMean, lStd) = (l.mean(), l.std())
+    (aMean, aStd) = (a.mean(), a.std())
+    (bMean, bStd) = (b.mean(), b.std())
+    return (lMean, lStd, aMean, aStd, bMean, bStd)
+
+def _min_max_scale(arr, new_range=(0, 255)):
+	"""
+	Perform min-max scaling to a NumPy array
+
+	Parameters:
+	-------
+	arr: NumPy array to be scaled to [new_min, new_max] range
+	new_range: tuple of form (min, max) specifying range of
+		transformed array
+
+	Returns:
+	-------
+	NumPy array that has been scaled to be in
+	[new_range[0], new_range[1]] range
+	"""
+	# get array's current min and max
+	mn = arr.min()
+	mx = arr.max()
+
+	# check if scaling needs to be done to be in new_range
+	if mn < new_range[0] or mx > new_range[1]:
+		# perform min-max scaling
+		scaled = (new_range[1] - new_range[0]) * (arr - mn) / (mx - mn) + new_range[0]
+	else:
+		# return array if already in range
+		scaled = arr
+
+	return scaled
+
+def _scale_array(arr, clip=True):
+	"""
+	Trim NumPy array values to be in [0, 255] range with option of
+	clipping or scaling.
+
+	Parameters:
+	-------
+	arr: array to be trimmed to [0, 255] range
+	clip: should array be scaled by np.clip? if False then input
+		array will be min-max scaled to range
+		[max([arr.min(), 0]), min([arr.max(), 255])]
+
+	Returns:
+	-------
+	NumPy array that has been scaled to be in [0, 255] range
+	"""
+	if clip:
+		scaled = np.clip(arr, 0, 255)
+	else:
+		scale_range = (max([arr.min(), 0]), min([arr.max(), 255]))
+		scaled = _min_max_scale(arr, new_range=scale_range)
+
+	return scaled
+
+
+# green = np.float32([[[0.5,1.0,0]]])
+# new_green = cv2.cvtColor(green,cv2.COLOR_BGR2LAB).astype("float32")
+
+#read source
+
+# uncali
+tgt =  cv2.imread(path_tgt)
+# cali
+src = cv2.imread(path_src)
+
+# srgb to rgb
+for y in range(src.shape[1]):
+    for x in range(src.shape[0]):
+        # int to float , rgb to lab
+        for i in range(src.shape[2]):
+            src[x, y][i] = GammaSRGBToLinear(src[x, y][i]/255)*255
+for y in range(tgt.shape[1]):
+    for x in range(tgt.shape[0]):
+        # int to float , rgb to lab
+        for i in range(tgt.shape[2]):
+            tgt[x, y][i] = GammaSRGBToLinear(tgt[x, y][i]/255)*255
+
+#rgb to lab
+src = cv2.cvtColor(src.astype("uint8"), cv2.COLOR_BGR2LAB).astype("float32")
+tgt = cv2.cvtColor(tgt.astype("uint8"), cv2.COLOR_BGR2LAB).astype("float32")
+
+# back to int for opencv
+(lMeanSrc, lStdSrc, aMeanSrc, aStdSrc, bMeanSrc, bStdSrc) = image_stats(src)
+(lMeanTgt, lStdTgt, aMeanTgt, aStdTgt, bMeanTgt, bStdTgt) = image_stats(tgt)
+
+print(lMeanSrc, lStdSrc, aMeanSrc, aStdSrc, bMeanSrc, bStdSrc)
+print(lMeanTgt, lStdTgt, aMeanTgt, aStdTgt, bMeanTgt, bStdTgt)
+
+l,a,b = cv2.split(src)
+
+l -= lMeanSrc
+a -= aMeanSrc
+b -= bMeanSrc
+
+l = (lStdTgt / lStdSrc) *l
+a = (aStdTgt / aStdSrc) * a
+b = (bStdTgt / bStdSrc) * b
+
+l += lMeanTgt
+a += aMeanTgt
+b += bMeanTgt
+
+clip = False
+
+l = _scale_array(l, clip=clip)
+a = _scale_array(a, clip=clip)
+b = _scale_array(b, clip=clip)
+
+tsf = cv2.merge([l, a, b])
+tsf = cv2.cvtColor(tsf.astype("uint8"), cv2.COLOR_LAB2BGR)
+
+
+# rgb to srgb
+for y in range(tsf.shape[1]):
+    for x in range(tsf.shape[0]):
+        # int to float , rgb to lab
+        for i in range(tsf.shape[2]):
+            tsf[x, y][i] = LinearToGammaSRGB(tsf[x, y][i]/255)*255
+
+print(tsf)
+
+cv2.imwrite(path_tsf, tsf)
+
+'''
+window_name = path_r
+# convert rgb to lab
+source = cv2.cvtColor(src, cv2.COLOR_BGR2LAB).astype("float32")
+
+rows,cols,chanel = source.shape
+
+r,g,b = cv2.split(src)
+
+r_mean = r.mean()
+r_std = r.std()
+print(r_mean)
+print(r_std)
+'''
