@@ -304,63 +304,104 @@ for y in range(tgt.shape[1]):
         for i in range(tgt.shape[2]):
             tgt[x, y][i] = GammaSRGBToLinear(tgt[x, y][i]/255)*255
 
-#rgb to lab
-src = cv2.cvtColor(src.astype("uint8"), cv2.COLOR_BGR2LAB).astype("float32")
-tgt = cv2.cvtColor(tgt.astype("uint8"), cv2.COLOR_BGR2LAB).astype("float32")
+def labSpaceCalculate(src,tgt):
+    # rgb to lab
+    src = cv2.cvtColor(src.astype("uint8"), cv2.COLOR_BGR2LAB).astype("float32")
+    tgt = cv2.cvtColor(tgt.astype("uint8"), cv2.COLOR_BGR2LAB).astype("float32")
 
-# back to int for opencv
-(lMeanSrc, lStdSrc, aMeanSrc, aStdSrc, bMeanSrc, bStdSrc) = image_stats(src)
-(lMeanTgt, lStdTgt, aMeanTgt, aStdTgt, bMeanTgt, bStdTgt) = image_stats(tgt)
+    # back to int for opencv
+    (lMeanSrc, lStdSrc, aMeanSrc, aStdSrc, bMeanSrc, bStdSrc) = image_stats(src)
+    (lMeanTgt, lStdTgt, aMeanTgt, aStdTgt, bMeanTgt, bStdTgt) = image_stats(tgt)
 
-print(lMeanSrc, lStdSrc, aMeanSrc, aStdSrc, bMeanSrc, bStdSrc)
-print(lMeanTgt, lStdTgt, aMeanTgt, aStdTgt, bMeanTgt, bStdTgt)
+    print(lMeanSrc, lStdSrc, aMeanSrc, aStdSrc, bMeanSrc, bStdSrc)
+    print(lMeanTgt, lStdTgt, aMeanTgt, aStdTgt, bMeanTgt, bStdTgt)
 
-l,a,b = cv2.split(src)
+    l, a, b = cv2.split(src)
 
-l -= lMeanSrc
-a -= aMeanSrc
-b -= bMeanSrc
+    l -= lMeanSrc
+    a -= aMeanSrc
+    b -= bMeanSrc
 
-l = (lStdTgt / lStdSrc) *l
-a = (aStdTgt / aStdSrc) * a
-b = (bStdTgt / bStdSrc) * b
+    l = (lStdTgt / lStdSrc) * l
+    a = (aStdTgt / aStdSrc) * a
+    b = (bStdTgt / bStdSrc) * b
 
-l += lMeanTgt
-a += aMeanTgt
-b += bMeanTgt
+    l += lMeanTgt
+    a += aMeanTgt
+    b += bMeanTgt
 
-clip = False
+    clip = False
 
-l = _scale_array(l, clip=clip)
-a = _scale_array(a, clip=clip)
-b = _scale_array(b, clip=clip)
+    l = _scale_array(l, clip=clip)
+    a = _scale_array(a, clip=clip)
+    b = _scale_array(b, clip=clip)
 
-tsf = cv2.merge([l, a, b])
-tsf = cv2.cvtColor(tsf.astype("uint8"), cv2.COLOR_LAB2BGR)
+    tsf = cv2.merge([l, a, b])
+    tsf = cv2.cvtColor(tsf.astype("uint8"), cv2.COLOR_LAB2BGR)
+
+    # rgb to srgb
+    for y in range(tsf.shape[1]):
+        for x in range(tsf.shape[0]):
+            # int to float , rgb to lab
+            for i in range(tsf.shape[2]):
+                tsf[x, y][i] = LinearToGammaSRGB(tsf[x, y][i] / 255) * 255
+
+    return (tsf)
+
+def HSVCalculate(src,tgt):
+    # rgb to hsv
+    src = cv2.cvtColor(src.astype("uint8"), cv2.COLOR_BGR2HSV ).astype("float32")
+    tgt = cv2.cvtColor(tgt.astype("uint8"), cv2.COLOR_BGR2HSV ).astype("float32")
+
+    # back to int for opencv
+    (hMeanSrc, hStdSrc, sMeanSrc, sStdSrc, vMeanSrc, vStdSrc) = image_stats(src)
+    (hMeanTgt, hStdTgt, sMeanTgt, sStdTgt, vMeanTgt, vStdTgt) = image_stats(tgt)
 
 
-# rgb to srgb
-for y in range(tsf.shape[1]):
-    for x in range(tsf.shape[0]):
-        # int to float , rgb to lab
-        for i in range(tsf.shape[2]):
-            tsf[x, y][i] = LinearToGammaSRGB(tsf[x, y][i]/255)*255
+    print(hMeanSrc, hStdSrc, sMeanSrc, sStdSrc, vMeanSrc, vStdSrc)
+    print(hMeanTgt, hStdTgt, sMeanTgt, sStdTgt, vMeanTgt, vStdTgt)
 
-print(tsf)
+    h, s, v = cv2.split(src)
 
+    # h -= hMeanSrc
+    s -= sMeanSrc
+    v -= vMeanSrc
+
+    # h = (hStdTgt / hStdSrc) * h
+    s = (sStdTgt / sStdSrc) * s
+    v = (vStdTgt / vStdSrc) * v
+
+    # h += hMeanTgt
+    s += sMeanTgt
+    v += vMeanTgt
+
+    clip = False
+
+    # h = _scale_array(h, clip=clip)
+    s = _scale_array(s, clip=clip)
+    v = _scale_array(v, clip=clip)
+
+    tsf = cv2.merge([h, s, v])
+    tsf = cv2.cvtColor(tsf.astype("uint8"), cv2.COLOR_HSV2BGR)
+
+    # rgb to srgb
+    for y in range(tsf.shape[1]):
+        for x in range(tsf.shape[0]):
+            # int to float , rgb to lab
+            for i in range(tsf.shape[2]):
+                tsf[x, y][i] = LinearToGammaSRGB(tsf[x, y][i] / 255) * 255
+
+    return (tsf)
+
+tsf = HSVCalculate(src , tgt)
+tsf = HSVCalculate(src , tgt)
+# tsf = labSpaceCalculate(src , tgt )
 cv2.imwrite(path_tsf, tsf)
+cv2.imshow('image_tsf', tsf)
+tgt =  cv2.imread(path_tgt)
+src = cv2.imread(path_src)
+cv2.imshow('image_src',src)
+cv2.imshow('image_tgt',tgt)
 
-'''
-window_name = path_r
-# convert rgb to lab
-source = cv2.cvtColor(src, cv2.COLOR_BGR2LAB).astype("float32")
+cv2.waitKey(0)
 
-rows,cols,chanel = source.shape
-
-r,g,b = cv2.split(src)
-
-r_mean = r.mean()
-r_std = r.std()
-print(r_mean)
-print(r_std)
-'''
